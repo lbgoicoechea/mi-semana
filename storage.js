@@ -1,9 +1,7 @@
-// Guardado en localStorage y lógica de semanas.
-// Se carga como script clásico (sin módulos) para que la app funcione
-// también abriendo index.html con doble clic.
+// Guardado en Supabase, utilidades de semana y lectura de los datos
+// viejos de localStorage (para migrarlos a la nube una sola vez).
 
-const STORAGE_KEY = 'tareas-semana';
-const SCHEMA_VERSION = 1;
+// ---------- Semanas ----------
 
 /** Semana ISO de una fecha, ej. "2026-W45". */
 function isoWeek(date = new Date()) {
@@ -27,49 +25,147 @@ function mondayOf(date = new Date()) {
   return d;
 }
 
-function defaultState() {
-  return { version: SCHEMA_VERSION, currentWeek: isoWeek(), tasks: [], history: [] };
-}
+// ---------- Datos viejos de localStorage ----------
 
-function loadState() {
+const LEGACY_KEY = 'tareas-semana';
+const LEGACY_BACKUP_KEY = 'tareas-semana-migradas';
+
+/** Devuelve { tasks, history } guardados antes de usar Supabase, o null. */
+function loadLegacyLocal() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultState();
+    const raw = localStorage.getItem(LEGACY_KEY);
+    if (!raw) return null;
     const data = JSON.parse(raw);
-    if (!data || !Array.isArray(data.tasks)) return defaultState();
-    return {
-      version: SCHEMA_VERSION,
-      currentWeek: data.currentWeek || isoWeek(),
-      tasks: data.tasks,
-      history: Array.isArray(data.history) ? data.history : [],
-    };
-  } catch (err) {
-    console.warn('No se pudieron leer los datos guardados', err);
-    return defaultState();
+    const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+    const history = Array.isArray(data?.history) ? data.history : [];
+    return tasks.length || history.length ? { tasks, history } : null;
+  } catch {
+    return null;
   }
 }
 
-function saveState(state) {
+/** Guarda una copia de respaldo y deja de ofrecer la migración. */
+function markLegacyMigrated() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (err) {
-    console.warn('No se pudieron guardar los datos', err);
-  }
+    const raw = localStorage.getItem(LEGACY_KEY);
+    if (raw) localStorage.setItem(LEGACY_BACKUP_KEY, raw);
+    localStorage.removeItem(LEGACY_KEY);
+  } catch { /* sin acceso a localStorage: no pasa nada */ }
 }
 
-/**
- * Si cambió la semana: archiva las tareas hechas en el historial y pasa
- * las pendientes a la semana actual (conservan su día y cuadrante).
- * Devuelve true si hubo cambios.
- */
-function rolloverWeek(state, nowWeek = isoWeek()) {
-  if (state.currentWeek === nowWeek) return false;
-  const done = state.tasks.filter((t) => t.done);
-  const pending = state.tasks.filter((t) => !t.done);
-  if (done.length) {
-    state.history.unshift({ week: state.currentWeek, tasks: done });
+// ---------- Supabase ----------
+
+const db = (() => {
+  const cfg = window.APP_CONFIG || {};
+  const configured = Boolean(
+    window.supabase &&
+    cfg.supabaseUrl && cfg.supabaseAnonKey &&
+    !cfg.supabaseUrl.includes('TU_PROYECTO') && cfg.supabaseAnonKey !== 'TU_ANON_KEY'
+  );
+  const client = configured ? window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey) : null;
+  let channel = null;
+
+  // Nombre en la app → columna en la base.
+  const FIELDS = {
+    id: 'id', title: 'title', quadrant: 'quadrant', day: 'day', category: 'category',
+    durationMin: 'duration_min', time: 'start_time', done: 'done', week: 'week', archived: 'archived',
+  };
+
+  function toRow(obj) {
+    const row = {};
+    for (const [key, col] of Object.entries(FIELDS)) {
+      if (obj[key] !== undefined) row[col] = obj[key];
+    }
+    return row;
   }
-  state.tasks = pending.map((t) => ({ ...t, week: nowWeek }));
-  state.currentWeek = nowWeek;
-  return true;
-}
+
+  function fromRow(r) {
+    return {
+      id: r.id,
+      title: r.title,
+      quadrant: r.quadrant,
+      day: r.day,
+      category: r.category,
+      durationMin: r.duration_min,
+      time: r.start_time,
+      done: r.done,
+      week: r.week,
+      archived: r.archived,
+      createdAt: Date.parse(r.created_at),
+    };
+  }
+
+  function check({ data, error }) {
+    if (error) throw error;
+    return data;
+  }
+
+  return {
+    configured,
+
+    // --- Sesión ---
+    async getSession() {
+      const { data } = await client.auth.getSession();
+      return data.session;
+    },
+    onAuthChange(callback) {
+      // No llamar a Supabase dentro del callback: se difiere para evitar bloqueos.
+      client.auth.onAuthStateChange((_event, session) => setTimeout(() => callback(session), 0));
+    },
+    async signIn(email) {
+      check(await client.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: location.origin + location.pathname },
+      }));
+    },
+    async signOut() {
+      await client.auth.signOut();
+    },
+
+    // --- Tareas ---
+    async fetchTasks() {
+      return check(await client.from('tasks').select('*').eq('archived', false)).map(fromRow);
+    },
+    async fetchHistory() {
+      return check(
+        await client.from('tasks').select('*').eq('archived', true)
+          .order('week', { ascending: false }).order('created_at'),
+      ).map(fromRow);
+    },
+    async insertTasks(tasks) {
+      if (tasks.length) check(await client.from('tasks').insert(tasks.map(toRow)));
+    },
+    async updateTask(id, patch) {
+      check(await client.from('tasks').update(toRow(patch)).eq('id', id));
+    },
+    async deleteTask(id) {
+      check(await client.from('tasks').delete().eq('id', id));
+    },
+
+    /**
+     * Cambio de semana: las tareas hechas de semanas anteriores pasan al
+     * historial y las pendientes se mueven a la semana actual.
+     */
+    async rollover(week) {
+      check(await client.from('tasks').update({ archived: true })
+        .eq('archived', false).eq('done', true).neq('week', week));
+      check(await client.from('tasks').update({ week })
+        .eq('archived', false).eq('done', false).neq('week', week));
+    },
+
+    // --- Tiempo real ---
+    subscribe(onChange) {
+      this.unsubscribe();
+      channel = client
+        .channel('tasks-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, onChange)
+        .subscribe();
+    },
+    unsubscribe() {
+      if (channel) {
+        client.removeChannel(channel);
+        channel = null;
+      }
+    },
+  };
+})();

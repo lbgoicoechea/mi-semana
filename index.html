@@ -7,17 +7,58 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="page">
+  <!-- Cargando -->
+  <div id="boot" class="page boot" role="status">Cargando…</div>
+
+  <!-- Login -->
+  <div id="auth-view" class="page" hidden>
+    <header class="page-head">
+      <div class="page-icon" aria-hidden="true">🗓️</div>
+      <h1>Mi semana</h1>
+      <p class="page-sub">Entrá con tu email para ver tus tareas en la compu y en el celular.</p>
+    </header>
+
+    <form id="login-form" class="login-card">
+      <label class="field-label" for="login-email">Email</label>
+      <input id="login-email" class="text-input" type="email" required autocomplete="email"
+             placeholder="tu@email.com" />
+      <button id="login-submit" class="btn btn-primary btn-block" type="submit">Enviarme un link para entrar</button>
+      <p id="login-msg" class="login-msg" role="status" aria-live="polite"></p>
+    </form>
+
+    <div id="config-missing" class="callout" hidden>
+      <span class="callout-icon" aria-hidden="true">⚙️</span>
+      <div>
+        Falta conectar la base de datos. Completá <code>config.js</code> con la URL y la
+        <em>anon key</em> de tu proyecto de Supabase.
+      </div>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div id="app-view" class="page" hidden>
     <header class="page-head">
       <div class="page-icon" aria-hidden="true">🗓️</div>
       <h1>Mi semana</h1>
       <p id="week-label" class="page-sub"></p>
     </header>
 
+    <div id="migrate-banner" class="callout" hidden>
+      <span class="callout-icon" aria-hidden="true">☁️</span>
+      <div class="callout-body">
+        <p id="migrate-text"></p>
+        <div class="callout-actions">
+          <button id="btn-migrate" class="btn btn-primary" type="button">Subir a mi cuenta</button>
+          <button id="btn-migrate-later" class="btn btn-text" type="button">Ahora no</button>
+        </div>
+      </div>
+    </div>
+
     <div class="toolbar">
       <nav id="day-filter" class="tabs" aria-label="Filtrar por día"></nav>
       <div class="toolbar-right">
         <button id="btn-history" class="btn btn-text" type="button">Historial</button>
+        <button id="btn-logout" class="btn btn-text" type="button">Salir</button>
         <button id="btn-new" class="btn btn-primary" type="button">Nueva</button>
       </div>
     </div>
@@ -84,6 +125,10 @@
     <div id="history-list"></div>
   </dialog>
 
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
   <script src="storage.js"></script>
   <script src="app.js"></script>
 </body>

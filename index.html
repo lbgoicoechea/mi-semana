@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mi semana</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="page-head">
+      <div class="page-icon" aria-hidden="true">🗓️</div>
+      <h1>Mi semana</h1>
+      <p id="week-label" class="page-sub"></p>
+    </header>
+
+    <div class="toolbar">
+      <nav id="day-filter" class="tabs" aria-label="Filtrar por día"></nav>
+      <div class="toolbar-right">
+        <button id="btn-history" class="btn btn-text" type="button">Historial</button>
+        <button id="btn-new" class="btn btn-primary" type="button">Nueva</button>
+      </div>
+    </div>
+
+    <div id="cat-filter" class="filter-row" role="group" aria-label="Filtrar por categoría"></div>
+
+    <main class="matrix" id="matrix">
+      <div class="axis axis-top"><span>Urgente</span><span>No urgente</span></div>
+      <div class="axis axis-left"><span>Importante</span><span>No importante</span></div>
+      <!-- Los cuadrantes se generan desde app.js -->
+    </main>
+  </div>
+
+  <!-- Modal crear / editar (estilo "página" con propiedades) -->
+  <dialog id="task-dialog" class="dialog">
+    <form id="task-form" method="dialog">
+      <p id="dialog-title" class="dialog-kicker">Nueva tarea</p>
+
+      <input id="f-title" class="title-input" name="title" type="text" required maxlength="140"
+             placeholder="Sin título" autocomplete="off" aria-label="Título de la tarea" />
+
+      <div class="props">
+        <div class="prop">
+          <span class="prop-label" id="lbl-quadrant">Prioridad</span>
+          <div id="f-quadrant" class="tag-picker" role="radiogroup" aria-labelledby="lbl-quadrant"></div>
+        </div>
+        <label class="prop">
+          <span class="prop-label">Día</span>
+          <select id="f-day" name="day" class="prop-input"></select>
+        </label>
+        <label class="prop">
+          <span class="prop-label">Categoría</span>
+          <select id="f-category" name="category" class="prop-input"></select>
+        </label>
+        <label class="prop">
+          <span class="prop-label">Duración</span>
+          <span class="prop-inline">
+            <input id="f-duration" name="duration" type="number" min="0" step="5"
+                   class="prop-input prop-number" placeholder="Vacío" />
+            <span class="prop-unit">min</span>
+          </span>
+        </label>
+        <label class="prop">
+          <span class="prop-label">Hora</span>
+          <input id="f-time" name="time" type="time" class="prop-input" />
+        </label>
+      </div>
+
+      <div class="dialog-actions">
+        <button id="btn-delete" class="btn btn-text btn-danger" type="button">Borrar</button>
+        <span class="spacer"></span>
+        <button id="btn-cancel" class="btn btn-text" type="button">Cancelar</button>
+        <button class="btn btn-primary" type="submit">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Historial -->
+  <dialog id="history-dialog" class="dialog dialog-wide">
+    <div class="dialog-head">
+      <h2>Historial</h2>
+      <button id="btn-history-close" class="btn btn-text" type="button">Cerrar</button>
+    </div>
+    <div id="history-list"></div>
+  </dialog>
+
+  <script src="storage.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
